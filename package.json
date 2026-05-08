@@ -1,0 +1,20 @@
+{
+  "name": "trimtube-clone",
+  "version": "1.0.0",
+  "description": "Universal YouTube clipping CLI",
+  "main": "cli.js",
+  "bin": {
+    "ttyt": "./cli.js"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "concurrently": "^9.1.0"
+  }
+}
