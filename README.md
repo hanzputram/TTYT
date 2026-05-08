@@ -1,19 +1,13 @@
-# 🌍 TrimTube Universal CLI
+# 🎬 TrimTube Clone CLI
 
-A professional-grade YouTube clipping engine designed for creators. Installable on any machine with Node.js.
+A powerful, high-performance tool to create viral vertical shorts from YouTube videos. Optimized for speed and precision.
 
 ## 🚀 Global Installation (NPM)
 
-You can now install TrimTube directly from GitHub as a global command:
+You can install TrimTube directly from GitHub as a global command:
 
 ```bash
-npm install -g https://github.com/USERNAME/trimtube-clone.git
-```
-
-### 🛠 Post-Install Setup
-After installing, you need to initialize the environment once:
-```bash
-ttyt setup
+npm install -g https://github.com/hanzputram/TTYT.git
 ```
 
 ### 🎬 Run
@@ -21,23 +15,22 @@ Launch the app anytime by typing:
 ```bash
 ttyt run
 ```
+*(First-time run will automatically perform setup).*
 
 ---
 
-## 🛠 Other Installation Methods
+## 💻 Manual Installation (Dev Mode)
 
-### 🐳 Docker (One-Command)
-```bash
-docker-compose up
-```
+### 1. The Native CLI
+- **Windows**: `.\ttyt.bat run`
+- **Mac/Linux**: `chmod +x ttyt.sh` then `./ttyt.sh run`
 
-### 💻 Native CLI (No Global Install)
-- **Windows**: `.\ttyt.bat setup` then `ttyt run`
-- **Mac/Linux**: `./ttyt.sh setup` then `./ttyt.sh run`
+### 2. The App Way (PWA)
+Open the app in Chrome/Edge and click the **Install Icon** in the address bar to add it to your Desktop or Mobile Home Screen.
 
 ---
 
-## 💻 Tech Stack
+## 🛠 Tech Stack
 - **CLI Engine**: Node.js + Chalk + Concurrently
 - **Backend**: FastAPI + FFmpeg + yt-dlp
 - **Frontend**: React + Vite (PWA Enabled)

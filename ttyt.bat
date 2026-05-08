@@ -13,15 +13,7 @@ exit /b 1
 
 :run
 echo.
-echo Checking for Docker...
-docker-compose --version >nul 2>&1
-if %errorlevel% equ 0 (
-    echo Docker detected. Running with docker-compose...
-    docker-compose up
-    exit /b 0
-)
-
-echo Docker not found. Running natively...
+echo Starting TrimTube Servers...
 echo [1/2] Starting Backend Server...
 cd /d "%~dp0backend"
 start "TrimTube Backend" /min cmd /c "call venv\Scripts\activate.bat && python main.py"

@@ -5,15 +5,9 @@ COMMAND=$1
 
 if [ "$COMMAND" == "run" ]; then
     echo "Starting TrimTube Clone..."
-    if command -v docker-compose &> /dev/null; then
-        echo "Detected Docker. Running with docker-compose..."
-        docker-compose up
-    else
-        echo "Docker not found. Running natively..."
-        (cd backend && source venv/bin/activate && python main.py) &
-        (cd frontend && npm run dev) &
-        wait
-    fi
+    (cd backend && source venv/bin/activate && python main.py) &
+    (cd frontend && npm run dev) &
+    wait
 elif [ "$COMMAND" == "setup" ]; then
     echo "Setting up TrimTube Clone..."
     cd backend
