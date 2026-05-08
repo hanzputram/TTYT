@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Scissors, Crop, Loader2, Sparkles, Video, Settings2, Play, Pause, Plus, Trash2, Layers } from 'lucide-react';
+import { Download, Scissors, Crop, Loader2, Sparkles, Video, Settings2, Play, Pause, Plus, Trash2, Layers, Monitor, Clock, Cpu, Zap, ChevronDown } from 'lucide-react';
 
 const API_BASE = "http://localhost:8001";
 
@@ -21,6 +21,56 @@ function App() {
 
   // Multi-clip state
   const [clips, setClips] = useState([{ id: 1, startTime: 0, endTime: 0, startInput: "00:00", endInput: "00:00" }]);
+  
+  // Resolution & Hardware Profile
+  const [resolution, setResolution] = useState('1080p');
+  const [hardwareProfile, setHardwareProfile] = useState('mid');
+  const [showResDropdown, setShowResDropdown] = useState(false);
+
+  const RESOLUTION_OPTIONS = [
+    { key: '480p',  label: '480p',  sublabel: 'SD',      icon: '📱', pixels: 480,  speedFactor: 0.3 },
+    { key: '720p',  label: '720p',  sublabel: 'HD',      icon: '💻', pixels: 720,  speedFactor: 0.6 },
+    { key: '1080p', label: '1080p', sublabel: 'Full HD', icon: '🖥️', pixels: 1080, speedFactor: 1.0 },
+    { key: '1440p', label: '1440p', sublabel: '2K',      icon: '🎬', pixels: 1440, speedFactor: 1.8 },
+    { key: '2160p', label: '2160p', sublabel: '4K UHD',  icon: '🎥', pixels: 2160, speedFactor: 3.5 },
+  ];
+
+  const HARDWARE_PROFILES = [
+    { key: 'low',  label: 'Low Spec',   desc: 'i3 / 4GB — Render lambat',    multiplier: 2.5, icon: '🐢' },
+    { key: 'mid',  label: 'Mid Spec',   desc: 'i5 / 8GB — Render standar',   multiplier: 1.0, icon: '⚡' },
+    { key: 'high', label: 'High Spec',  desc: 'i7+ / 16GB+ — Render cepat',  multiplier: 0.5, icon: '🚀' },
+  ];
+
+  // ETA calculation
+  const calculateETA = () => {
+    const resOption = RESOLUTION_OPTIONS.find(r => r.key === resolution);
+    const hwProfile = HARDWARE_PROFILES.find(h => h.key === hardwareProfile);
+    if (!resOption || !hwProfile) return { total: 0, perClip: [], formatted: '0s' };
+
+    const perClip = clips.map((clip, i) => {
+      const clipDur = Math.max(0, clip.endTime - clip.startTime);
+      // Base: ~1s processing per 1s of video at 1080p on mid-range
+      // + 5s overhead per clip (connection, initialization)
+      const baseTime = clipDur * resOption.speedFactor * hwProfile.multiplier;
+      const overhead = 5 * hwProfile.multiplier;
+      const estimated = baseTime + overhead;
+      return { index: i, duration: clipDur, estimated: Math.ceil(estimated) };
+    });
+
+    const total = perClip.reduce((sum, c) => sum + c.estimated, 0);
+    return { total, perClip, formatted: formatETA(total) };
+  };
+
+  const formatETA = (seconds) => {
+    if (seconds < 60) return `~${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    if (m < 60) return `~${m}m ${s}s`;
+    const h = Math.floor(m / 60);
+    return `~${h}h ${m % 60}m`;
+  };
+
+  const eta = calculateETA();
   
   // Free crop state (shared across clips)
   const [crop, setCrop] = useState({ x: 0.25, y: 0.1, w: 0.5, h: 0.8 });
@@ -87,7 +137,8 @@ function App() {
         body: JSON.stringify({
           url,
           clips: clips.map(c => ({ start_time: c.startTime, end_time: c.endTime })),
-          crop_x: crop.x, crop_y: crop.y, crop_w: crop.w, crop_h: crop.h
+          crop_x: crop.x, crop_y: crop.y, crop_w: crop.w, crop_h: crop.h,
+          resolution
         })
       });
       const data = await res.json();
@@ -107,8 +158,8 @@ function App() {
             setStatusText(pData.status);
             if (pData.progress >= 100 && pData.download_urls) {
               clearInterval(pollProgress);
-              for (const dlUrl of pData.download_urls) {
-                await triggerFileDownload(dlUrl);
+              for (let i = 0; i < pData.download_urls.length; i++) {
+                await triggerFileDownload(pData.download_urls[i], i + 1);
                 await new Promise(r => setTimeout(r, 500));
               }
               setProcessing(false);
@@ -122,7 +173,7 @@ function App() {
     }
   };
 
-  const triggerFileDownload = async (downloadUrl) => {
+  const triggerFileDownload = async (downloadUrl, clipNumber = 1) => {
     try {
       const fileRes = await fetch(downloadUrl);
       if (!fileRes.ok) throw new Error('Download failed');
@@ -130,7 +181,7 @@ function App() {
       const localUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = localUrl;
-      a.download = `TrimTube_${Math.floor(Date.now() / 1000)}.mp4`;
+      a.download = `Clip ${clipNumber}.mp4`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -311,7 +362,7 @@ function App() {
             <div className="preview-panel glass-panel">
               <div className="panel-header">
                 <h3><Video size={18} /> Smart Canvas</h3>
-                <span className="badge">1080p Source</span>
+                <span className="badge">{resolution} Source</span>
               </div>
               
               <div className="video-container" ref={previewRef} onMouseMove={onMouseMove} onMouseLeave={() => setIsDragging(false)}>
@@ -451,13 +502,100 @@ function App() {
                 </div>
               </div>
 
+              {/* Resolution Selector */}
+              <div className="settings-group">
+                <div className="group-title"><Monitor size={16} /> Output Resolution</div>
+                <div className="resolution-selector">
+                  <div className="res-dropdown-trigger" onClick={() => setShowResDropdown(!showResDropdown)}>
+                    <div className="res-selected">
+                      <span className="res-icon">{RESOLUTION_OPTIONS.find(r => r.key === resolution)?.icon}</span>
+                      <div className="res-info">
+                        <span className="res-label">{resolution}</span>
+                        <span className="res-sublabel">{RESOLUTION_OPTIONS.find(r => r.key === resolution)?.sublabel}</span>
+                      </div>
+                    </div>
+                    <ChevronDown size={16} className={`res-chevron ${showResDropdown ? 'open' : ''}`} />
+                  </div>
+                  {showResDropdown && (
+                    <div className="res-dropdown">
+                      {RESOLUTION_OPTIONS.map(opt => (
+                        <div 
+                          key={opt.key}
+                          className={`res-option ${resolution === opt.key ? 'active' : ''}`}
+                          onClick={() => { setResolution(opt.key); setShowResDropdown(false); }}
+                        >
+                          <span className="res-icon">{opt.icon}</span>
+                          <div className="res-option-info">
+                            <span className="res-option-label">{opt.label}</span>
+                            <span className="res-option-sublabel">{opt.sublabel}</span>
+                          </div>
+                          {resolution === opt.key && <div className="res-check">✓</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Hardware Profile */}
+              <div className="settings-group">
+                <div className="group-title"><Cpu size={16} /> Hardware Profile</div>
+                <div className="hw-profiles">
+                  {HARDWARE_PROFILES.map(hw => (
+                    <div 
+                      key={hw.key}
+                      className={`hw-card ${hardwareProfile === hw.key ? 'active' : ''}`}
+                      onClick={() => setHardwareProfile(hw.key)}
+                    >
+                      <span className="hw-icon">{hw.icon}</span>
+                      <div className="hw-info">
+                        <span className="hw-label">{hw.label}</span>
+                        <span className="hw-desc">{hw.desc}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ETA Estimation */}
+              <div className="settings-group">
+                <div className="group-title"><Clock size={16} /> Export Time Estimation</div>
+                <div className="eta-panel">
+                  <div className="eta-total">
+                    <div className="eta-total-label">Estimated Total Time</div>
+                    <div className="eta-total-value">{eta.formatted}</div>
+                  </div>
+                  <div className="eta-breakdown">
+                    {eta.perClip.map((c, i) => (
+                      <div key={i} className="eta-clip-row">
+                        <div className="eta-clip-name">
+                          <Scissors size={12} />
+                          <span>Clip {i + 1}</span>
+                        </div>
+                        <div className="eta-clip-meta">
+                          <span className="eta-clip-dur">{formatTime(c.duration)}</span>
+                          <span className="eta-clip-arrow">→</span>
+                          <span className="eta-clip-est">{formatETA(c.estimated)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="eta-info-note">
+                    <Zap size={12} />
+                    <span>Estimasi berdasarkan PC {HARDWARE_PROFILES.find(h => h.key === hardwareProfile)?.label} @ {resolution}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Summary */}
               <div className="settings-group">
                 <div className="group-title"><Settings2 size={16} /> Batch Summary</div>
                 <div className="specs-grid">
                   <div className="spec-item"><span className="spec-label">Total Clips</span><span className="spec-val">{clips.length}</span></div>
                   <div className="spec-item"><span className="spec-label">Total Duration</span><span className="spec-val">{formatTime(totalClipDuration)}</span></div>
+                  <div className="spec-item"><span className="spec-label">Resolution</span><span className="spec-val">{resolution}</span></div>
                   <div className="spec-item"><span className="spec-label">Format</span><span className="spec-val">MP4 (H.264)</span></div>
+                  <div className="spec-item"><span className="spec-label">Est. Time</span><span className="spec-val eta-highlight">{eta.formatted}</span></div>
                 </div>
               </div>
 

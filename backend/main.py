@@ -29,6 +29,15 @@ if not os.path.exists(DOWNLOAD_DIR):
 
 app.mount("/downloads", StaticFiles(directory=DOWNLOAD_DIR), name="downloads")
 
+# Resolution presets: maps label to (height, crf, preset)
+RESOLUTION_PRESETS = {
+    "480p":  {"height": 480,  "crf": 23, "preset": "ultrafast", "label": "480p (SD)"},
+    "720p":  {"height": 720,  "crf": 22, "preset": "veryfast",  "label": "720p (HD)"},
+    "1080p": {"height": 1080, "crf": 20, "preset": "superfast", "label": "1080p (Full HD)"},
+    "1440p": {"height": 1440, "crf": 19, "preset": "fast",      "label": "1440p (2K)"},
+    "2160p": {"height": 2160, "crf": 18, "preset": "medium",    "label": "2160p (4K)"},
+}
+
 class ProcessRequest(BaseModel):
     url: str
     start_time: float
@@ -37,6 +46,7 @@ class ProcessRequest(BaseModel):
     crop_y: float  # Percentage 0-1
     crop_w: float  # Percentage 0-1
     crop_h: float  # Percentage 0-1
+    resolution: str = "1080p"
 
 class ClipItem(BaseModel):
     start_time: float
@@ -49,6 +59,11 @@ class BatchProcessRequest(BaseModel):
     crop_y: float
     crop_w: float
     crop_h: float
+    resolution: str = "1080p"
+
+@app.get("/resolution-presets")
+def get_resolution_presets():
+    return RESOLUTION_PRESETS
 
 def strip_ansi(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -103,10 +118,16 @@ def get_video_info(url: str):
 
 def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, output_path: str):
     try:
-        progress_store[job_id] = {"progress": 2, "status": "Connecting to High-Speed Stream..."}
+        # Get resolution preset
+        res_preset = RESOLUTION_PRESETS.get(req.resolution, RESOLUTION_PRESETS["1080p"])
+        target_height = res_preset["height"]
+        crf_value = str(res_preset["crf"])
+        preset_value = res_preset["preset"]
+        
+        progress_store[job_id] = {"progress": 2, "status": f"Connecting ({res_preset['label']})..."}
         
         ydl_opts = {
-            'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', 
+            'format': 'bestvideo+bestaudio/best', 
             'quiet': True,
             'noplaylist': True,
             'nocheckcertificate': True,
@@ -144,6 +165,9 @@ def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, outp
             cw = cw if cw % 2 == 0 else cw - 1
             ch = ch if ch % 2 == 0 else ch - 1
 
+            # Build VF: crop then scale to target height, keeping aspect ratio
+            vf_filter = f"crop={cw}:{ch}:{cx}:{cy},scale=-2:{target_height}"
+
             command = [
                 "ffmpeg",
                 "-user_agent", ua,
@@ -156,10 +180,10 @@ def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, outp
                 "-ss", str(req.start_time),
                 "-t", str(req.end_time - req.start_time),
                 "-i", audio_url,
-                "-vf", f"crop={cw}:{ch}:{cx}:{cy}",
+                "-vf", vf_filter,
                 "-c:v", "libx264",
-                "-crf", "20",
-                "-preset", "superfast",
+                "-crf", crf_value,
+                "-preset", preset_value,
                 "-c:a", "aac",
                 "-b:a", "192k",
                 "-strict", "experimental",
@@ -175,6 +199,8 @@ def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, outp
             cw = cw if cw % 2 == 0 else cw - 1
             ch = ch if ch % 2 == 0 else ch - 1
             
+            vf_filter = f"crop={cw}:{ch}:{cx}:{cy},scale=-2:{target_height}"
+            
             command = [
                 "ffmpeg",
                 "-user_agent", ua,
@@ -182,10 +208,10 @@ def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, outp
                 "-ss", str(req.start_time),
                 "-t", str(req.end_time - req.start_time),
                 "-i", video_url,
-                "-vf", f"crop={cw}:{ch}:{cx}:{cy}",
+                "-vf", vf_filter,
                 "-c:v", "libx264",
-                "-crf", "20",
-                "-preset", "superfast",
+                "-crf", crf_value,
+                "-preset", preset_value,
                 "-c:a", "aac",
                 "-b:a", "192k",
                 "-strict", "experimental",
@@ -194,7 +220,7 @@ def run_render_task(job_id: str, req: ProcessRequest, output_filename: str, outp
             ]
 
         total_duration = req.end_time - req.start_time
-        progress_store[job_id] = {"progress": 5, "status": "Starting Render (4K takes time)..."}
+        progress_store[job_id] = {"progress": 5, "status": f"Rendering {res_preset['label']}..."}
         
         process = subprocess.Popen(
             command,
@@ -270,7 +296,8 @@ def run_batch_render(batch_id: str, req: BatchProcessRequest):
                 crop_x=req.crop_x,
                 crop_y=req.crop_y,
                 crop_w=req.crop_w,
-                crop_h=req.crop_h
+                crop_h=req.crop_h,
+                resolution=req.resolution
             )
 
             clip_id = f"{batch_id}_clip{idx}"
